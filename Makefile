@@ -1,0 +1,105 @@
+# This is an easily customizable makefile template. The purpose is to
+# provide an instant building environment for docker.
+#
+# Docker:
+# ------
+# $ make build               - build docker build
+# $ make start               - start docker containers
+# $ make stop                - stop docker containers
+# $ make login               - log in php-fpm APP container
+# $ make redis               - log in redis-cli REDIS container
+# $ make remove              - removing all containers
+# $ make queue-run           - start queue:work in container
+
+#
+# Other:
+# ------
+# $ make composer-install    - run composer install
+# $ make cache-all           - cache:clear + clear-compiled + config:cache
+
+
+##==========================================================================
+## Variables
+##==========================================================================
+include .env
+export
+
+##==========================================================================
+DOCKER_EXEC_PHP_FPM = docker exec -it --user=www-data ${CONTAINER_PHP_FPM_NAME}
+
+##====================================redis-cli======================================
+DOCKER_EXEC_REDIS_CLI = docker exec -it ${CONTAINER_REDIS_NAME}
+##====================================docker-compose======================================
+DOCKER_COMPOSE_FILENAME = docker-compose.yaml
+
+
+##==========================================================================
+## make build
+##==========================================================================
+build:
+	docker network create ${APP_NETWORK_NAME} || true && \
+	docker-compose -f $(DOCKER_COMPOSE_FILENAME) build --no-cache
+
+##==========================================================================
+## make start
+##==========================================================================
+start:
+	docker-compose -f $(DOCKER_COMPOSE_FILENAME) up --build -d
+
+##==========================================================================
+## make stop
+##==========================================================================
+stop:
+	docker-compose -f ${DOCKER_COMPOSE_FILENAME} down
+
+##==========================================================================
+## make login
+##==========================================================================
+login:
+	$(DOCKER_EXEC_PHP_FPM) bash
+
+##==========================================================================
+## make remove containers
+##==========================================================================
+remove:
+	docker-compose down --remove-orphans
+
+##==========================================================================
+## make redis-cli start
+##==========================================================================
+redis:
+	$(DOCKER_EXEC_REDIS_CLI) redis-cli
+
+##==========================================================================
+## make queue:work
+##==========================================================================
+queue-run:
+	make artisan-command CMD=queue:work
+
+##==========================================================================
+## make composer-install
+##==========================================================================
+composer-install:
+	    $(DOCKER_EXEC_PHP_FPM) composer install
+
+##==========================================================================
+## make artisan-command
+## make artisan-command CMD=config:cache
+##==========================================================================
+artisan-command:
+    ifneq ($(CMD),)
+	    $(DOCKER_EXEC_PHP_FPM) sh -c "php artisan $(CMD)"
+    else
+	    $(DOCKER_EXEC_PHP_FPM) sh -c "php artisan"
+    endif
+
+##==========================================================================
+## make cache-all
+##==========================================================================
+cache-all:
+	make artisan-command CMD=cache:clear \
+	&& make artisan-command CMD=config:clear \
+	&& make artisan-command CMD=clear-compiled \
+	&& make artisan-command CMD=config:cache \
+	&& make artisan-command CMD=route:cache \
+	&& make artisan-command CMD=event:cache
